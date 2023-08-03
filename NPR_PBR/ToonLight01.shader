@@ -5,6 +5,8 @@ Shader "WLTX/ToonLight01"
         //***************基础属性
         [Header(Base Color)]
         [MainTexture]_BaseMap("基础纹理 _BaseMap (Albedo)", 2D) = "white" {}
+        [Toggle(_OpenMask)]_OpenMask("开启渐变颜色Mask", int) = 0
+        [NoScaleOffset]_ColorMask("渐变颜色Mask _ColorMask", 2D) = "white" {}
         [hdr][MainColor]_BaseColor("基础颜色 _BaseColor", Color) = (1,1,1)
         [hdr]_SecondColor("暗部颜色", Color)=(1,1,1,1)
         [hdr]_BaseSkinColor("皮肤的基础颜色 _BaseSkinColor", Color) = (1,1,1)
@@ -31,6 +33,7 @@ Shader "WLTX/ToonLight01"
 
         //***************光照阴影属性
 		[Header(Lighting)]
+        [hdr]_SpecularColor("高光颜色 _SpecularColor", Color) = (1,1,1)
 		[NoScaleOffset]_LightingMap("光照贴图 _LightingMap", 2D) = "white" {}
 		_SpecularMultiplier("高光强度阈值 _SpecularMultiplier", Range(0,1)) = 1
 
@@ -87,6 +90,7 @@ Shader "WLTX/ToonLight01"
 
         //蕾丝透贴
         [Header(Alpha)]
+        [Enum(UnityEngine.Rendering.CullMode)]_CullMode ("CullMode", float) = 2
         [Toggle(_UseAlphaClipping)]_UseAlphaClipping("开启蕾丝(Render Queue设置成 2501) _UseAlphaClipping", Float) = 0
         _Cutoff("蕾丝 _Cutoff (Alpha Cutoff)", Range(0.0, 1.0)) = 0.5
 
@@ -188,8 +192,8 @@ Shader "WLTX/ToonLight01"
 				}
 
 
-            //Cull Back
-			Cull Off
+            Cull [_CullMode]
+			//Cull Off
 			ZTest LEqual
             ZWrite On
             //Blend One Zero
@@ -201,6 +205,7 @@ Shader "WLTX/ToonLight01"
 
             #pragma shader_feature_local _NORMALMAP
             #pragma shader_feature_local _OpenPbr 
+            #pragma shader_feature_local _OpenMask 
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
@@ -243,7 +248,7 @@ Shader "WLTX/ToonLight01"
 
             ZWrite On
             ColorMask RGB
-            Cull Off
+            Cull Back
 
             HLSLPROGRAM
             // Required to compile gles 2.0 with standard srp library
@@ -379,5 +384,5 @@ Shader "WLTX/ToonLight01"
 
     FallBack "Hidden/Universal Render Pipeline/FallbackError"
 
-   CustomEditor "ToonLightShaderGUI01"
+   //CustomEditor "ToonLightShaderGUI01"
 }

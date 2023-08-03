@@ -90,7 +90,7 @@ half3 CalcSpecular(inout ToonSurfaceData surfaceData, LightingDatas lightingData
     // //half3 rimColor = rimIntensity * _BaseColor * 0.4 * rs;
     // specular += rimColor;
 
-    return specular;
+    return specular*_SpecularColor;
 }
 
 //阴影计算
@@ -98,90 +98,35 @@ half3 CalcLightColor(ToonSurfaceData surfaceData, LightingDatas lightingData, Li
 {
 
     half2 uv = surfaceData.uv;
-    half4 revertTex = tex2D(_LightingMap, float2(1-uv.x, uv.y));
     half3 L = light.direction;
-    half a = revertTex.g;
+    half a = lightingData.lightingMapColor.g;
     a *= step(0.15, a);
     a *= step(a, 0.25);
-     if(a > 0) { // 计算脸部阴影
+    if(a > 0) 
+    { // 计算脸部阴影
 		isFace = true;
-        
-        // 模型固定y不变, 光照方向只取xz平面
-        half2 L1 = normalize(L.xz);
-        L.xz = L1.xy;
-        L.y = 0;
-        
-        half2 F1 = normalize(_ForwardDirection.xz);
-        //Front Direction
-        half3 F = half3(F1.x, 0, F1.y);
-        //Right Direction
-        half3 R = half3(F1.y, 0, -F1.x);
-
-        //c1: Up Direction  c2: front cross lightDirection
-        half3 c1 = cross(F, R);
-        half3 c2 = cross(F, L);
-        //*** !!判断选择左边的还是右边的脸部光照贴图,判断规则是根据脸部阴影SDF图的阈值，来选择左边还是右边的脸的光照帖图！！
-        float dotC = dot(c1, c2);
-        float shadowD = dotC < 0 ? lightingData.lightingMapColor.r : revertTex.r;
-
-
-        float FL = dot(F1, L1) * 0.5 + 0.5;
-
-		//**************脸部硬阴影
-        //float attenuation = step(1-FL, shadowD);
-        //return lerp(_ShadowColor, light.color, attenuation);
-
-		//**************脸部软阴影 人物模型脸部阴影虚化渐变效果
-		_RimAreaMid = 1 - FL;
-		float attenuation = smoothstep(_RimAreaMid - _RimAreaSoft / 2.0f, _RimAreaMid + _RimAreaSoft / 2.0f, shadowD);
-        attenuation = lerp(1, attenuation, _ShadowAmount);
-
-		////////////////////////////////////////////////////
-		#if _IsFace
-			//计算该像素的Screen Position
-			float2 scrPos = lightingData.scrPos.xy / lightingData.scrPos.w;
-			//获取屏幕信息
-			float4 scaledScreenParams = GetScaledScreenParams();
-
-			//在Light Dir的基础上乘以NDC.w的倒数以修正摄像机距离所带来的变化
-			float3 viewLightDir = normalize(TransformWorldToViewDir(light.direction)) *(1 / lightingData.positionNDC.w);
-
-			//计算采样点，其中_HairShadowDistace用于控制采样距离
-			float2 samplingPoint = scrPos + _HairShadowDistace * viewLightDir.xy * float2(1 / scaledScreenParams.x, 1 / scaledScreenParams.y);
-
-
-			//新增的“深度测试”
-			float depth = (lightingData.positionCS.z / lightingData.positionCS.w) * 0.5 + 0.5;
-			float hairDepth = SAMPLE_TEXTURE2D(_HairSoildColor, sampler_HairSoildColor, samplingPoint).g;
-			//0.0001为bias，用于精度校正
-			float depthCorrect = depth < hairDepth + 0.0001 ? 0 : 1;
-
-			//若采样点在阴影区内,则取得的value为1,作为阴影的话得用1 - value;
-			float hairShadowRate = 1 - SAMPLE_TEXTURE2D(_HairSoildColor, sampler_HairSoildColor, samplingPoint).r;
-
-			float hairShadow = lerp(_ShadowColor, light.color, hairShadowRate);
-
-
-			float totalShdaowRate = shadowD;
-			if (hairShadowRate < shadowD)
-				totalShdaowRate = hairShadowRate;
-
-			float attenuation2 = smoothstep(_RimAreaMid - _RimAreaSoft / 2.0f, _RimAreaMid + _RimAreaSoft / 2.0f, totalShdaowRate);
-			attenuation2 = lerp(1, attenuation2, _ShadowAmount);
-			float faceShadow2 = lerp(_ShadowColor, light.color, attenuation2);
-			return faceShadow2;
-		#else
-			float faceShadow = lerp(_ShadowColor, light.color, attenuation);
-			return faceShadow;
-		#endif
-		////////////////////////////////////////////////////
+        float isSahdow = 0;
+        //这张阈值图代表的是阴影在灯光从正前方移动到左后方的变化
+        half4 revertTex = tex2D(_LightingMap, float2(1-uv.x, uv.y));
+        half2 Left = normalize(TransformObjectToWorldDir(float3(-1, 0, 0)).xz);	//世界空间角色正左侧方向向量
+        half2 Front = normalize(TransformObjectToWorldDir(float3(0, 0, 1)).xz);	//世界空间角色正前方向向量
+        half2 LightDir = normalize(L.xz);
+        half ctrl = clamp(0, 1, dot(Front, LightDir) * 0.5 + 0.5);//计算前向与灯光的角度差（0-1），0代表重合
+        half ilm = dot(LightDir, Left) > 0 ? lightingData.lightingMapColor.r : revertTex.r;//确定采样的贴图
+        //ctrl值越大代表越远离灯光，所以阴影面积会更大，光亮的部分会减少-阈值要大一点，所以ctrl=阈值
+        //ctrl大于采样，说明是阴影点
+        isSahdow = step(ilm, ctrl);
+        //return isSahdow;
+        half bias = smoothstep(0, _ForwardDirection.r, abs(ctrl - ilm));//平滑边界，smoothstep的原理和用法可以参考我上一篇文章
+        half3 diffuse = lerp(light.color ,_ShadowColor , isSahdow);
+        return diffuse;
     }
-         
+
     float rampV = 0.75;   
     
     half ao = lightingData.lightingMapColor.g;
 
-    a = revertTex.g;
+    a = surfaceData.alpha;
     a *= step(0.59, a);
     a *= step(a, 0.61);
 

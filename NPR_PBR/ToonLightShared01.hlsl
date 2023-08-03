@@ -44,7 +44,7 @@ struct Varyings
 
 };
 
-sampler2D _BaseMap; 
+sampler2D _BaseMap,_ColorMask; 
 sampler2D _NormalMap; 
 sampler2D _AoMap; 
 sampler2D _MetalMap;
@@ -70,7 +70,7 @@ CBUFFER_START(UnityPerMaterial)
     half4   _BaseSkinColor;
     float _Smoothness, _MetallicStrength;
 
-    float4 _MaskColor;
+    float4 _MaskColor,_SpecularColor;
     float _isEmission;
     float isFace = false;
 	float4 _NormalMap_ST;
@@ -244,7 +244,10 @@ float4 fragMask(Varyings input) : SV_Target
 half4 GetFinalBaseColor(Varyings input)
 {
     half4 baseMapColor = tex2D(_BaseMap, input.uv);
-
+    half colormask = 0;
+#ifdef _OpenMask
+    colormask = tex2D(_ColorMask, input.uv).r;
+#endif
     //normalMap 扰动基础纹理uv
     // half4 normalMap = tex2D(_NormalMap,input.uv1);
     // half2 offset = UnpackNormal(normalMap).rg;
@@ -254,7 +257,7 @@ half4 GetFinalBaseColor(Varyings input)
     half ramp =(input.positionWSAndFogFactor.y - _MinZ) / (1.9 - _MinZ) * (1 - 0) + 0;
     half4 color01 = GetBaseColor(baseMapColor.a);
     half4 color = lerp(_SecondColor,color01,ramp);
-
+    color = lerp(color,half4(1,1,1,1),colormask);
     return baseMapColor *color;
 }
 
